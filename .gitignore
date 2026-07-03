@@ -1,0 +1,34 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.next/
+out/
+coverage/
+
+# env and secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Prisma/local generated artifacts
+backend/generated/
+
+# Docker/local volumes
+postgres_data/
