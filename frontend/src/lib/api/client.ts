@@ -35,7 +35,7 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(typeof error.message === "string" ? error.message : "Request failed");
+    throw new Error(resolveErrorMessage(error));
   }
 
   if (response.status === 204) {
@@ -43,6 +43,30 @@ export async function apiRequest<T>(
   }
 
   return (await response.json()) as T;
+}
+
+function resolveErrorMessage(error: unknown) {
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (!error || typeof error !== "object") {
+    return "Request failed";
+  }
+
+  const message = (error as { message?: unknown }).message;
+  if (typeof message === "string") {
+    return message;
+  }
+
+  if (message && typeof message === "object") {
+    const nestedMessage = (message as { message?: unknown }).message;
+    if (typeof nestedMessage === "string") {
+      return nestedMessage;
+    }
+  }
+
+  return "Request failed";
 }
 
 function readCookie(name: string) {

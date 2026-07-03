@@ -5,7 +5,6 @@ import {
   Injectable,
   Logger,
   ServiceUnavailableException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError, AxiosResponse } from 'axios';
@@ -63,7 +62,9 @@ export class LinkedinOAuthService {
     const clientId = this.config.get<string>('LINKEDIN_CLIENT_ID');
     const redirectUri = this.config.get<string>('LINKEDIN_REDIRECT_URI');
     if (!clientId || !redirectUri) {
-      throw new UnauthorizedException('LinkedIn OAuth is not configured.');
+      throw new ServiceUnavailableException(
+        'LinkedIn OAuth is not configured. Set LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, and LINKEDIN_REDIRECT_URI on the backend.',
+      );
     }
 
     const state = randomBytes(32).toString('base64url');

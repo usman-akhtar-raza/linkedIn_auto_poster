@@ -68,6 +68,7 @@ export default function SettingsPage() {
                 <Unplug data-icon="inline-start" />Disconnect
               </Button>
             </div>
+            {connect.error ? <p className="text-sm text-destructive">{connect.error.message}</p> : null}
           </CardContent>
         </Card>
 
