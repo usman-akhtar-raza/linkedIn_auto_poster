@@ -7,7 +7,7 @@ import { AnalyticsService } from '../application/analytics.service';
 @ApiTags('analytics')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('analytics')
+@Controller('api/analytics')
 export class AnalyticsController {
   constructor(private readonly analytics: AnalyticsService) {}
 

@@ -8,7 +8,7 @@ import { CreatePromptTemplateDto } from './dto/create-prompt-template.dto';
 @ApiTags('prompts')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('prompts')
+@Controller('api/prompts')
 export class PromptsController {
   constructor(private readonly prompts: PromptTemplateService) {}
 

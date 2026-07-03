@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -75,18 +75,4 @@ import { HealthModule } from './modules/health/health.module';
   ],
   providers: [CsrfMiddleware],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(CsrfMiddleware)
-      .exclude(
-        { path: 'api/health', method: RequestMethod.ALL },
-        { path: 'api/readiness', method: RequestMethod.ALL },
-        { path: 'api/liveness', method: RequestMethod.ALL },
-        { path: 'api/auth/signin', method: RequestMethod.POST },
-        { path: 'api/auth/signup', method: RequestMethod.POST },
-        { path: 'api/linkedin/oauth/callback', method: RequestMethod.GET },
-      )
-      .forRoutes('*');
-  }
-}
+export class AppModule {}

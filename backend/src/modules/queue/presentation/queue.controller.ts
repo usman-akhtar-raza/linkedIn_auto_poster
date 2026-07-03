@@ -6,7 +6,7 @@ import { QueueService } from '../application/queue.service';
 @ApiTags('queue')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('queue')
+@Controller('api/queue')
 export class QueueController {
   constructor(private readonly queue: QueueService) {}
 

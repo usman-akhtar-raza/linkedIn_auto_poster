@@ -8,7 +8,7 @@ import { UpdateScheduleDto } from './dto/update-schedule.dto';
 @ApiTags('scheduler')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('scheduler')
+@Controller('api/scheduler')
 export class SchedulerController {
   constructor(private readonly scheduler: SchedulerService) {}
 

@@ -8,7 +8,7 @@ import { RememberDto } from './dto/remember.dto';
 @ApiTags('memory')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('memory')
+@Controller('api/memory')
 export class MemoryController {
   constructor(private readonly memory: MemoryService) {}
 

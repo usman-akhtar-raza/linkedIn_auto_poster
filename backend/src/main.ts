@@ -4,25 +4,33 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { Logger } from 'nestjs-pino';
+import type { NextFunction, Request, Response } from 'express';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { QueueService } from './modules/queue/application/queue.service';
+import { CsrfMiddleware } from './common/middleware/csrf.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.useLogger(app.get(Logger));
-  app.setGlobalPrefix('api', {
-    exclude: ['health', 'readiness', 'liveness'],
-  });
   app.use(
     helmet({
       contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
     }),
   );
   app.use(cookieParser());
+  const csrfMiddleware = app.get(CsrfMiddleware);
+  app.use((request: Request, response: Response, next: NextFunction) => {
+    if (shouldSkipCsrf(request)) {
+      next();
+      return;
+    }
+
+    csrfMiddleware.use(request, response, next);
+  });
   app.enableCors({
     origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
     credentials: true,
@@ -61,3 +69,17 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 4000);
 }
 void bootstrap();
+
+function shouldSkipCsrf(request: Request) {
+  const safePath = request.path.replace(/\/$/, '');
+  const method = request.method.toUpperCase();
+
+  return (
+    safePath === '/health' ||
+    safePath === '/readiness' ||
+    safePath === '/liveness' ||
+    (method === 'POST' && safePath === '/api/auth/signin') ||
+    (method === 'POST' && safePath === '/api/auth/signup') ||
+    (method === 'GET' && safePath === '/api/linkedin/oauth/callback')
+  );
+}

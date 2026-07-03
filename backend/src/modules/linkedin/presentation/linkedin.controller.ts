@@ -7,7 +7,7 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { LinkedinOAuthService } from '../application/linkedin-oauth.service';
 
 @ApiTags('linkedin')
-@Controller('linkedin')
+@Controller('api/linkedin')
 export class LinkedinController {
   constructor(
     private readonly oauth: LinkedinOAuthService,

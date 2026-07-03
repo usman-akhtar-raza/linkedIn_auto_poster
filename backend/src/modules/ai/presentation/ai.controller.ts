@@ -11,7 +11,7 @@ import { GeneratePostDto } from './dto/generate-post.dto';
 @ApiTags('ai')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('ai')
+@Controller('api/ai')
 export class AiController {
   constructor(
     private readonly research: ResearchService,

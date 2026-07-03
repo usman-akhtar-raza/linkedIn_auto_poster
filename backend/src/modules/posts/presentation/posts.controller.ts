@@ -10,7 +10,7 @@ import { PostsService } from '../application/posts.service';
 @ApiTags('posts')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
-@Controller('posts')
+@Controller('api/posts')
 export class PostsController {
   constructor(private readonly posts: PostsService) {}
 
