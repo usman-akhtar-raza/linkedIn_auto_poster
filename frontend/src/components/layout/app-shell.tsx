@@ -1,5 +1,10 @@
+"use client";
+
 import Link from "next/link";
-import { BarChart3, CheckSquare, FileText, LayoutDashboard, Settings, Sparkles } from "lucide-react";
+import { useEffect } from "react";
+import { signOut, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { BarChart3, CheckSquare, FileText, LayoutDashboard, LogOut, Settings, Sparkles } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -13,6 +18,23 @@ const navItems = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const { data: session, status } = useSession();
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/");
+    }
+  }, [router, status]);
+
+  if (status === "loading" || status === "unauthenticated") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        Loading workspace...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r bg-background lg:flex lg:flex-col">
@@ -49,12 +71,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-8">
           <div>
             <p className="text-sm font-medium">Production workspace</p>
-            <p className="text-xs text-muted-foreground">Research, draft, approve, publish, measure</p>
+            <p className="text-xs text-muted-foreground">{session?.user?.email ?? "Research, draft, approve, publish, measure"}</p>
           </div>
-          <Button>
-            <Sparkles data-icon="inline-start" />
-            Generate post
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button>
+              <Sparkles data-icon="inline-start" />
+              Generate post
+            </Button>
+            <Button variant="outline" onClick={() => signOut({ callbackUrl: "/" })}>
+              <LogOut data-icon="inline-start" />
+              Sign out
+            </Button>
+          </div>
         </header>
         <div className="p-4 lg:p-8">{children}</div>
       </main>
