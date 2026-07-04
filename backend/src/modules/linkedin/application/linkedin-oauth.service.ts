@@ -93,9 +93,19 @@ export class LinkedinOAuthService {
     };
   }
 
-  async handleCallback(input: { code?: string; state?: string; error?: string }) {
+  async handleCallback(input: {
+    code?: string;
+    state?: string;
+    error?: string;
+    errorDescription?: string;
+  }) {
     if (input.error) {
-      throw new BadRequestException(`LinkedIn OAuth failed: ${input.error}`);
+      const details = input.errorDescription
+        ? `: ${input.errorDescription}`
+        : '';
+      throw new BadRequestException(
+        `LinkedIn OAuth failed: ${input.error}${details}`,
+      );
     }
 
     if (!input.code || !input.state) {

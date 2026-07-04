@@ -26,9 +26,10 @@ export class LinkedinController {
     @Query('code') code: string | undefined,
     @Query('state') state: string | undefined,
     @Query('error') error: string | undefined,
+    @Query('error_description') errorDescription: string | undefined,
     @Res() response: Response,
   ) {
-    await this.oauth.handleCallback({ code, state, error });
+    await this.oauth.handleCallback({ code, state, error, errorDescription });
     const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
     response.redirect(`${frontendUrl}/settings?linkedin=connected`);
   }
