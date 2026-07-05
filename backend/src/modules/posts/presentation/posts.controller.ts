@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { GenerateDraftDto } from './dto/generate-draft.dto';
 import { ListPostsDto } from './dto/list-posts.dto';
 import { RejectPostDto } from './dto/reject-post.dto';
+import { SchedulePostDto } from './dto/schedule-post.dto';
 import { PostsService } from '../application/posts.service';
 
 @ApiTags('posts')
@@ -44,5 +45,14 @@ export class PostsController {
   @Post(':id/publish')
   publish(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
     return this.posts.publish(user.userId, id);
+  }
+
+  @Post(':id/schedule')
+  schedule(
+    @CurrentUser() user: { userId: string },
+    @Param('id') id: string,
+    @Body() dto: SchedulePostDto,
+  ) {
+    return this.posts.schedule(user.userId, id, dto.scheduledFor);
   }
 }

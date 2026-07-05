@@ -107,8 +107,59 @@ export class SchedulerService {
     );
   }
 
+  @Cron(CronExpression.EVERY_MINUTE)
+  async enqueueDueScheduledPosts() {
+    const now = new Date();
+    const posts = await this.prisma.post.findMany({
+      where: {
+        status: 'SCHEDULED',
+        scheduledFor: { lte: now },
+      },
+      select: {
+        id: true,
+        userId: true,
+        scheduledFor: true,
+      },
+      orderBy: { scheduledFor: 'asc' },
+      take: 50,
+    });
+
+    await Promise.all(
+      posts.map(async (post) => {
+        const claimed = await this.prisma.post.updateMany({
+          where: {
+            id: post.id,
+            status: 'SCHEDULED',
+            scheduledFor: { lte: now },
+          },
+          data: { status: 'APPROVED' },
+        });
+
+        if (claimed.count !== 1) {
+          return;
+        }
+
+        const job = await this.queue.enqueuePublishPost(post.userId, post.id);
+        await this.prisma.job.create({
+          data: {
+            userId: post.userId,
+            postId: post.id,
+            queueJobId: String(job.id),
+            type: 'PUBLISH_POST',
+            status: 'QUEUED',
+            scheduledFor: post.scheduledFor,
+            payload: { source: 'scheduled-post-publisher' },
+          },
+        });
+      }),
+    );
+  }
+
   recoverMissedJobs() {
-    return this.enqueueDueUsers();
+    return Promise.all([
+      this.enqueueDueUsers(),
+      this.enqueueDueScheduledPosts(),
+    ]);
   }
 
   private computeNextRun(input: {

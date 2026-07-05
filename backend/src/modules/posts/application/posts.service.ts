@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  PreconditionFailedException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { WriterService } from '../../ai/application/writer.service';
 import { EditorService } from '../../ai/application/editor.service';
@@ -104,6 +109,12 @@ export class PostsService {
 
   async publish(userId: string, postId: string) {
     const post = await this.getOwnedPost(userId, postId);
+    if (post.status !== 'APPROVED' && post.status !== 'SCHEDULED') {
+      throw new PreconditionFailedException(
+        'Only approved or scheduled posts can be published.',
+      );
+    }
+
     const published = await this.publisher.publishTextPost(
       userId,
       post.content,
@@ -114,7 +125,33 @@ export class PostsService {
       data: {
         status: 'PUBLISHED',
         publishedAt: new Date(),
+        scheduledFor: null,
         linkedinPostUrn: published.linkedinPostUrn,
+      },
+    });
+  }
+
+  async schedule(userId: string, postId: string, scheduledFor: Date) {
+    const post = await this.getOwnedPost(userId, postId);
+    if (post.status !== 'APPROVED' && post.status !== 'SCHEDULED') {
+      throw new PreconditionFailedException(
+        'Only approved posts can be scheduled.',
+      );
+    }
+
+    if (Number.isNaN(scheduledFor.getTime())) {
+      throw new BadRequestException('Schedule time is invalid.');
+    }
+
+    if (scheduledFor.getTime() <= Date.now()) {
+      throw new BadRequestException('Schedule time must be in the future.');
+    }
+
+    return this.prisma.post.update({
+      where: { id: postId },
+      data: {
+        status: 'SCHEDULED',
+        scheduledFor,
       },
     });
   }
