@@ -24,10 +24,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/");
+      return;
     }
-  }, [router, status]);
 
-  if (status === "loading" || status === "unauthenticated") {
+    if (status === "authenticated" && !session?.accessToken) {
+      void signOut({ callbackUrl: "/" });
+    }
+  }, [router, session?.accessToken, status]);
+
+  if (status === "loading" || status === "unauthenticated" || !session?.accessToken) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
         Loading workspace...

@@ -19,9 +19,11 @@ export async function apiRequest<T>(
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
 
-  if (session?.accessToken) {
-    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  if (!session?.accessToken) {
+    throw new Error("Your session is missing an API token. Please sign out and sign in again.");
   }
+
+  headers.set("Authorization", `Bearer ${session.accessToken}`);
 
   if (init.method && init.method !== "GET") {
     headers.set("X-CSRF-Token", readCookie("csrf_token") ?? "");
