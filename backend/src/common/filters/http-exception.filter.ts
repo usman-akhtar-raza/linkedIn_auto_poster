@@ -27,7 +27,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
         : 'Unexpected server error';
 
     if (status >= 500) {
-      this.logger.error(exception);
+      // Log only message + stack, never the raw exception object: Axios errors
+      // serialize `config.headers.Authorization` (the OpenRouter key / LinkedIn
+      // bearer token), which pino's redaction paths do not reach.
+      const detail =
+        exception instanceof Error
+          ? (exception.stack ?? exception.message)
+          : 'Non-error thrown';
+      this.logger.error(`Unhandled ${status} on ${request.method} ${request.url}: ${detail}`);
     }
 
     response.status(status).json({

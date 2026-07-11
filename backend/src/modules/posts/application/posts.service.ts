@@ -8,6 +8,7 @@ import { PrismaService } from '../../../database/prisma.service';
 import { WriterService } from '../../ai/application/writer.service';
 import { EditorService } from '../../ai/application/editor.service';
 import { ImagePromptService } from '../../ai/application/image-prompt.service';
+import { ImagesService } from '../../images/application/images.service';
 import { LinkedinPublisherService } from '../../linkedin/application/linkedin-publisher.service';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class PostsService {
     private readonly writer: WriterService,
     private readonly editor: EditorService,
     private readonly imagePrompts: ImagePromptService,
+    private readonly images: ImagesService,
     private readonly publisher: LinkedinPublisherService,
   ) {}
 
@@ -79,12 +81,157 @@ export class PostsService {
 
     if (data.includeImage) {
       const prompt = await this.imagePrompts.createPrompt(data.topic, content);
-      await this.prisma.generatedImage.create({
-        data: { postId: post.id, prompt, provider: 'pending-provider' },
-      });
+      const pending = await this.images.createPending(post.id, prompt);
+      void this.images.generate(pending.id).catch(() => undefined);
     }
 
     return this.getOwnedPost(userId, post.id);
+  }
+
+  async create(
+    userId: string,
+    data: {
+      title: string;
+      hook?: string;
+      content: string;
+      hashtags?: string[];
+      topicId?: string;
+    },
+  ) {
+    if (data.topicId) {
+      await this.ensureTopicUsable(userId, data.topicId);
+    }
+
+    const hook =
+      data.hook ?? data.content.split('\n').find(Boolean)?.slice(0, 180) ?? data.title;
+
+    // A manually created post publishes straight to LinkedIn. Publish first so
+    // the whole operation is atomic — if LinkedIn publishing fails (e.g. not
+    // connected) nothing is stored and the caller gets the error.
+    const published = await this.publisher.publishTextPost(userId, data.content);
+
+    const post = await this.prisma.post.create({
+      data: {
+        userId,
+        topicId: data.topicId,
+        title: data.title,
+        hook,
+        content: data.content,
+        hashtags: data.hashtags ?? [],
+        status: 'PUBLISHED',
+        publishedAt: new Date(),
+        linkedinPostUrn: published.linkedinPostUrn,
+      },
+    });
+
+    return this.getOwnedPost(userId, post.id);
+  }
+
+  get(userId: string, postId: string) {
+    return this.getOwnedPost(userId, postId);
+  }
+
+  async update(
+    userId: string,
+    postId: string,
+    data: {
+      title?: string;
+      hook?: string;
+      content?: string;
+      hashtags?: string[];
+    },
+  ) {
+    const post = await this.getOwnedPost(userId, postId);
+
+    if (post.status === 'PUBLISHED') {
+      throw new PreconditionFailedException(
+        'Published posts cannot be edited; the content is already live on LinkedIn.',
+      );
+    }
+
+    const editsContent =
+      data.title !== undefined ||
+      data.hook !== undefined ||
+      data.content !== undefined ||
+      data.hashtags !== undefined;
+
+    // Editing content invalidates a prior review decision — send it back
+    // through the approval gate so the change is re-reviewed before publishing.
+    const resetApproval =
+      editsContent &&
+      (post.status === 'APPROVED' ||
+        post.status === 'SCHEDULED' ||
+        post.status === 'REJECTED');
+
+    await this.prisma.post.update({
+      where: { id: postId },
+      data: {
+        ...(data.title !== undefined ? { title: data.title } : {}),
+        ...(data.hook !== undefined ? { hook: data.hook } : {}),
+        ...(data.content !== undefined ? { content: data.content } : {}),
+        ...(data.hashtags !== undefined ? { hashtags: data.hashtags } : {}),
+        ...(resetApproval
+          ? {
+              status: 'PENDING_APPROVAL',
+              approvedAt: null,
+              scheduledFor: null,
+              rejectionReason: null,
+            }
+          : {}),
+      },
+    });
+
+    return this.getOwnedPost(userId, postId);
+  }
+
+  async remove(userId: string, postId: string) {
+    const post = await this.getOwnedPost(userId, postId);
+
+    // If the post is live on LinkedIn, delete it there first. If that fails the
+    // exception propagates and the local row is kept, so the app never claims a
+    // still-published post was removed.
+    if (post.linkedinPostUrn) {
+      await this.publisher.deleteMemberPost(userId, post.linkedinPostUrn);
+    }
+
+    await this.prisma.post.delete({ where: { id: postId } });
+    return { id: postId, deleted: true };
+  }
+
+  // Pulls the user's existing LinkedIn posts and stores any that aren't already
+  // in the DB as PUBLISHED rows, so history from before they connected shows up
+  // in the list. Requires the LinkedIn token to hold the r_member_social scope.
+  async importFromLinkedIn(userId: string) {
+    const remote = await this.publisher.fetchMemberPosts(userId);
+
+    const existing = await this.prisma.post.findMany({
+      where: { userId, linkedinPostUrn: { in: remote.map((post) => post.urn) } },
+      select: { linkedinPostUrn: true },
+    });
+    const known = new Set(existing.map((post) => post.linkedinPostUrn));
+
+    const toImport = remote.filter((post) => !known.has(post.urn));
+
+    if (toImport.length > 0) {
+      await this.prisma.post.createMany({
+        data: toImport.map((post) => ({
+          userId,
+          title: post.text.split('\n').find(Boolean)?.slice(0, 120) ?? 'LinkedIn post',
+          hook: post.text.split('\n').find(Boolean)?.slice(0, 180) ?? '',
+          content: post.text,
+          hashtags: [],
+          status: 'PUBLISHED' as const,
+          publishedAt: post.createdAt ?? new Date(),
+          linkedinPostUrn: post.urn,
+        })),
+      });
+    }
+
+    return {
+      fetched: remote.length,
+      imported: toImport.length,
+      skipped: remote.length - toImport.length,
+    };
   }
 
   async approve(userId: string, postId: string) {
@@ -171,5 +318,16 @@ export class PostsService {
     }
 
     return post;
+  }
+
+  private async ensureTopicUsable(userId: string, topicId: string) {
+    const topic = await this.prisma.topic.findFirst({
+      where: { id: topicId, OR: [{ userId }, { userId: null }] },
+      select: { id: true },
+    });
+
+    if (!topic) {
+      throw new BadRequestException('Topic not found.');
+    }
   }
 }

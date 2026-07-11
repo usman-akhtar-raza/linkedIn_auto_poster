@@ -139,17 +139,9 @@ export class SchedulerService {
           return;
         }
 
-        const job = await this.queue.enqueuePublishPost(post.userId, post.id);
-        await this.prisma.job.create({
-          data: {
-            userId: post.userId,
-            postId: post.id,
-            queueJobId: String(job.id),
-            type: 'PUBLISH_POST',
-            status: 'QUEUED',
-            scheduledFor: post.scheduledFor,
-            payload: { source: 'scheduled-post-publisher' },
-          },
+        await this.queue.enqueuePublishPost(post.userId, post.id, 0, {
+          scheduledFor: post.scheduledFor,
+          source: 'scheduled-post-publisher',
         });
       }),
     );

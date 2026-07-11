@@ -19,6 +19,12 @@ import { ImagePromptService } from './application/image-prompt.service';
     EditorService,
     ImagePromptService,
   ],
-  exports: [ResearchService, WriterService, EditorService, ImagePromptService],
+  exports: [
+    OpenRouterClient,
+    ResearchService,
+    WriterService,
+    EditorService,
+    ImagePromptService,
+  ],
 })
 export class AiModule {}

@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { validateEnvironment } from './config/env.validation';
 import { DatabaseModule } from './database/database.module';
@@ -73,6 +74,9 @@ import { HealthModule } from './modules/health/health.module';
     DashboardModule,
     HealthModule,
   ],
-  providers: [CsrfMiddleware],
+  providers: [
+    CsrfMiddleware,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

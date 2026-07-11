@@ -18,7 +18,7 @@ export class ImagePromptService {
           content: `Topic: ${topic}\nPost:\n${post}\nReturn one production-ready visual prompt.`,
         },
       ],
-      0.5,
+      { temperature: 0.5 },
     );
   }
 }

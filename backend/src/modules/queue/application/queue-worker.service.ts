@@ -3,6 +3,7 @@ import { Job, Worker } from 'bullmq';
 import { AnalyticsService } from '../../analytics/application/analytics.service';
 import { ResearchService } from '../../ai/application/research.service';
 import { ImagesService } from '../../images/application/images.service';
+import { JobsService } from '../../jobs/application/jobs.service';
 import { PostsService } from '../../posts/application/posts.service';
 import { TopicsService } from '../../topics/application/topics.service';
 import { JOB_NAMES, QUEUE_NAMES } from '../domain/job-names';
@@ -25,6 +26,7 @@ export class QueueWorkerService implements OnModuleInit, OnModuleDestroy {
     private readonly posts: PostsService,
     private readonly images: ImagesService,
     private readonly analytics: AnalyticsService,
+    private readonly jobs: JobsService,
   ) {}
 
   onModuleInit() {
@@ -64,19 +66,33 @@ export class QueueWorkerService implements OnModuleInit, OnModuleDestroy {
     processor: (job: Job) => Promise<unknown>,
     concurrency: number,
   ) {
-    const worker = new Worker(queueName, processor, {
-      connection: this.queues.getConnection(),
-      concurrency,
-    });
+    const worker = new Worker(
+      queueName,
+      async (job) => {
+        await this.jobs.markRunning(String(job.id)).catch(() => undefined);
+        return processor(job);
+      },
+      {
+        connection: this.queues.getConnection(),
+        concurrency,
+      },
+    );
 
     worker.on('completed', (job) => {
       this.logger.log(`Queue job completed queue=${queueName} jobId=${job.id}`);
+      void this.jobs.markCompleted(String(job.id)).catch(() => undefined);
     });
     worker.on('failed', (job, error) => {
       this.logger.error(
         `Queue job failed queue=${queueName} jobId=${job?.id} attempts=${job?.attemptsMade} error=${error.message}`,
       );
-      if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+      const exhausted = !!job && job.attemptsMade >= (job.opts.attempts ?? 1);
+      if (job) {
+        void this.jobs
+          .markFailed(String(job.id), error.message, job.attemptsMade, exhausted)
+          .catch(() => undefined);
+      }
+      if (exhausted) {
         void this.queues.enqueueRetry({
           queueName,
           jobName: job.name,
@@ -91,7 +107,7 @@ export class QueueWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async handleResearch(job: Job<UserJob>) {
     await job.updateProgress(10);
-    const topics = this.research.searchLatestTrends();
+    const topics = await this.research.searchLatestTrends();
     await job.updateProgress(60);
     await this.topics.saveMany(job.data.userId, topics);
     await job.updateProgress(100);
@@ -100,19 +116,31 @@ export class QueueWorkerService implements OnModuleInit, OnModuleDestroy {
 
   private async handleGeneratePost(job: Job<GeneratePostJob>) {
     await job.updateProgress(25);
-    const topic =
-      job.data.topic ??
-      this.research.searchLatestTrends().sort((a, b) => b.score - a.score)[0].title;
+    const topic = job.data.topic ?? (await this.pickTopic(job.data.userId));
     const post = await this.posts.generateDraft(job.data.userId, { topic });
     await job.updateProgress(100);
     return { postId: post.id };
   }
 
+  private async pickTopic(userId: string) {
+    const recent = await this.topics.latestForUser(userId);
+    if (recent) {
+      return recent.title;
+    }
+
+    const topics = await this.research.searchLatestTrends();
+    await this.topics.saveMany(userId, topics);
+    return topics.sort((a, b) => b.score - a.score)[0].title;
+  }
+
   private async handleGenerateImage(job: Job<GenerateImageJob>) {
     await job.updateProgress(50);
-    const image = await this.images.createPending(job.data.postId, job.data.prompt);
+    const image = await this.images.generateForPost(
+      job.data.postId,
+      job.data.prompt,
+    );
     await job.updateProgress(100);
-    return { imageId: image.id };
+    return { imageId: image?.id };
   }
 
   private async handlePublish(job: Job<PublishJob>) {

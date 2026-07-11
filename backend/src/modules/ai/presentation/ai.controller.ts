@@ -21,7 +21,7 @@ export class AiController {
   ) {}
 
   @Post('research')
-  researchTopics() {
+  async researchTopics() {
     return this.research.searchLatestTrends();
   }
 
