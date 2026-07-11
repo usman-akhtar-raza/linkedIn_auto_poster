@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose *)",
+      "Bash(npx prisma *)",
+      "Bash(./node_modules/.bin/prisma migrate *)",
+      "mcp__visualize__show_widget"
+    ]
+  }
+}

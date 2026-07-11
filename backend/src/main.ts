@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger as NestLogger, ValidationPipe } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -46,16 +47,38 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  const config = new DocumentBuilder()
-    .setTitle('AI LinkedIn Content Agent')
-    .setDescription(
-      'Research, generate, approve, publish, and analyze LinkedIn content.',
-    )
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger maps the entire attack surface; keep it out of production.
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('AI LinkedIn Content Agent')
+      .setDescription(
+        'Research, generate, approve, publish, and analyze LinkedIn content.',
+      )
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
+
+  mountBullBoard(app);
+
+  await app.listen(process.env.PORT ?? 4000);
+}
+void bootstrap();
+
+function mountBullBoard(app: Awaited<ReturnType<typeof NestFactory.create>>) {
+  const logger = new NestLogger('BullBoard');
+  const user = process.env.BULL_BOARD_USER;
+  const password = process.env.BULL_BOARD_PASSWORD;
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  if ((!user || !password) && isProduction) {
+    logger.warn(
+      'BULL_BOARD_USER/BULL_BOARD_PASSWORD not set — /admin/queues is disabled in production.',
+    );
+    return;
+  }
 
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
@@ -64,11 +87,44 @@ async function bootstrap() {
     queues: queueService.getQueues().map((queue) => new BullMQAdapter(queue)),
     serverAdapter,
   });
-  app.use('/admin/queues', serverAdapter.getRouter());
 
-  await app.listen(process.env.PORT ?? 4000);
+  if (user && password) {
+    app.use('/admin/queues', basicAuth('Bull Board', user, password));
+  } else {
+    logger.warn(
+      'BULL_BOARD_USER/BULL_BOARD_PASSWORD not set — /admin/queues is exposed WITHOUT authentication (development only).',
+    );
+  }
+
+  app.use('/admin/queues', serverAdapter.getRouter());
 }
-void bootstrap();
+
+function basicAuth(realm: string, expectedUser: string, expectedPassword: string) {
+  const safeEqual = (a: string, b: string) => {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
+  };
+
+  return (request: Request, response: Response, next: NextFunction) => {
+    const header = request.headers.authorization ?? '';
+    const [scheme, encoded] = header.split(' ');
+
+    if (scheme === 'Basic' && encoded) {
+      const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+      const separator = decoded.indexOf(':');
+      const user = decoded.slice(0, separator);
+      const pass = decoded.slice(separator + 1);
+      if (safeEqual(user, expectedUser) && safeEqual(pass, expectedPassword)) {
+        next();
+        return;
+      }
+    }
+
+    response.setHeader('WWW-Authenticate', `Basic realm="${realm}"`);
+    response.status(401).send('Authentication required.');
+  };
+}
 
 function shouldSkipCsrf(request: Request) {
   const safePath = request.path.replace(/\/$/, '');

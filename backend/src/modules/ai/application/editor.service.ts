@@ -15,7 +15,7 @@ export class EditorService {
         },
         { role: 'user', content },
       ],
-      0.3,
+      { temperature: 0.3 },
     );
   }
 }

@@ -112,11 +112,24 @@ export class LinkedinOAuthService {
       throw new BadRequestException('LinkedIn callback is missing code or state.');
     }
 
-    const oauthState = await this.prisma.oAuthState.findUnique({
-      where: { stateHash: this.hashState(input.state) },
+    const stateHash = this.hashState(input.state);
+
+    // Atomically claim the state: only one concurrent callback can flip
+    // usedAt from null, which prevents replay / double-use races.
+    const claimed = await this.prisma.oAuthState.updateMany({
+      where: { stateHash, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
     });
 
-    if (!oauthState || oauthState.usedAt || oauthState.expiresAt < new Date()) {
+    if (claimed.count !== 1) {
+      throw new GoneException('LinkedIn OAuth state is expired or invalid.');
+    }
+
+    const oauthState = await this.prisma.oAuthState.findUnique({
+      where: { stateHash },
+    });
+
+    if (!oauthState) {
       throw new GoneException('LinkedIn OAuth state is expired or invalid.');
     }
 
@@ -141,10 +154,6 @@ export class LinkedinOAuthService {
 
     await Promise.all([
       this.syncOrganizations(account.id, token.access_token),
-      this.prisma.oAuthState.update({
-        where: { id: oauthState.id },
-        data: { usedAt: new Date() },
-      }),
       this.audit.record({
         userId: oauthState.userId,
         action: 'linkedin.connected',

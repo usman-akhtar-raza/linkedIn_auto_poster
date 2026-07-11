@@ -22,6 +22,7 @@ export type AgentPost = {
   title: string;
   hook: string;
   content: string;
+  hashtags?: string[];
   status: string;
   scheduledFor?: string;
   linkedinPostUrn?: string;
